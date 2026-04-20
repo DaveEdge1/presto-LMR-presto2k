@@ -1,0 +1,247 @@
+name: LMR CFR Reconstruction
+
+on:
+  push:
+    paths:
+      - 'query_params.json'   # not in template; server commits this LAST so all files are present
+      - 'lipd_cfr.pkl'        # pre-built cfr ProxyDatabase; commit to trigger reconstruction
+  workflow_dispatch:
+    inputs:
+      unique_id:
+        description: 'Unique reconstruction ID'
+        required: true
+        type: string
+      lipd_data_url:
+        description: 'URL to pre-generated LiPD pickle (traditional pathway)'
+        required: false
+        type: string
+      lipd_query_json:
+        description: 'LiPD data query parameters for workflow generation (dispatch pathway)'
+        required: false
+        type: string
+
+jobs:
+  # ── Job 1: Acquire and convert proxy data ─────────────────────────────────
+  # Uploads lipd_cfr.pkl as an artifact so Job 2 can be re-run independently
+  # when only the CFR reconstruction step needs debugging.
+  prepare-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Detect which pathway to use.
+      # Priority order:
+      #   0. lipd_cfr.pkl in repo       — pre-built cfr ProxyDatabase (skip all generation)
+      #   1. query_params.json in repo  — server-committed (push trigger pathway)
+      #   2. lipd_data_url input        — traditional pre-generated pickle
+      #   3. lipd_query_json input      — manual workflow_dispatch
+      - name: Detect data acquisition pathway
+        id: pathway
+        run: |
+          if [ -f "lipd_cfr.pkl" ]; then
+            echo "pathway=prebuilt" >> $GITHUB_OUTPUT
+            echo "Using pre-built lipd_cfr.pkl from repo (skipping data generation)"
+          elif [ -f "query_params.json" ]; then
+            echo "pathway=github_actions" >> $GITHUB_OUTPUT
+            MODE=$(jq -r '.mode' query_params.json)
+            echo "mode=$MODE" >> $GITHUB_OUTPUT
+            echo "Using query_params.json from repo (mode: $MODE)"
+          elif [ -n "${{ inputs.lipd_data_url }}" ]; then
+            echo "pathway=traditional" >> $GITHUB_OUTPUT
+            echo "Using traditional pathway: download from URL"
+          elif [ -n "${{ inputs.lipd_query_json }}" ]; then
+            echo "pathway=github_actions" >> $GITHUB_OUTPUT
+            echo '${{ inputs.lipd_query_json }}' > query_params.json
+            MODE=$(jq -r '.mode' query_params.json)
+            echo "mode=$MODE" >> $GITHUB_OUTPUT
+            echo "Using lipd_query_json input (mode: $MODE)"
+          else
+            echo "ERROR: No data source found (no lipd_cfr.pkl, no query_params.json, no lipd_data_url, no lipd_query_json)"
+            exit 1
+          fi
+
+      # PREBUILT PATHWAY: lipd_cfr.pkl already in repo — nothing to do
+      - name: Use pre-built proxy database
+        if: steps.pathway.outputs.pathway == 'prebuilt'
+        run: |
+          echo "Using pre-built lipd_cfr.pkl from repository"
+          ls -lh lipd_cfr.pkl
+
+      # TRADITIONAL PATHWAY: Download from URL
+      - name: Download LiPD data from URL
+        if: steps.pathway.outputs.pathway == 'traditional'
+        run: |
+          echo "Downloading pre-generated LiPD data from: ${{ inputs.lipd_data_url }}"
+          curl -L "${{ inputs.lipd_data_url }}" -o lipd_data.pkl
+          ls -lh lipd_data.pkl
+
+      # GITHUB ACTIONS PATHWAY - PATH A: Archived Compilation (direct download)
+      - name: Download archived compilation
+        if: steps.pathway.outputs.pathway == 'github_actions' && steps.pathway.outputs.mode == 'archived'
+        run: |
+          COMPILATION=$(jq -r '.compilation' query_params.json)
+          VERSION=$(jq -r '.version' query_params.json)
+          PICKLE_URL="https://lipdverse.org/${COMPILATION}/${VERSION}/${COMPILATION}${VERSION}.pkl"
+
+          echo "Downloading archived compilation from: $PICKLE_URL"
+          curl -L -f "$PICKLE_URL" -o lipd_data.pkl || {
+            echo "ERROR: Failed to download archived compilation"
+            echo "URL: $PICKLE_URL"
+            exit 1
+          }
+
+          ls -lh lipd_data.pkl
+
+      # GITHUB ACTIONS PATHWAY - PATH B: Filtered Query (lipdGenerator Docker)
+      - name: Generate LiPD data from query
+        if: steps.pathway.outputs.pathway == 'github_actions' && steps.pathway.outputs.mode == 'filtered'
+        run: |
+          echo "Querying lipdverse and generating .lpd files using lipdGenerator container..."
+          mkdir -p lipd_output
+          docker run --rm \
+            -v $(pwd)/query_params.json:/query_params.json:ro \
+            -v $(pwd)/lipd_output:/output \
+            davidedge/lipd_webapps:lipdGenerator /query_params.json /output lpd
+
+          if [ ! -f lipd_output/lipd_files.zip ]; then
+            echo "ERROR: lipdGenerator did not produce lipd_files.zip"
+            ls -la lipd_output/ || true
+            exit 1
+          fi
+
+          echo "lipd_files.zip ready:"
+          ls -lh lipd_output/lipd_files.zip
+
+      - name: Verify LiPD data created
+        if: steps.pathway.outputs.pathway != 'prebuilt'
+        run: |
+          if [ -f lipd_data.pkl ] || [ -f lipd_output/lipd_files.zip ]; then
+            echo "LiPD data ready"
+            ls -lh lipd_data.pkl lipd_output/lipd_files.zip 2>/dev/null || true
+          else
+            echo "ERROR: No LiPD data found (expected lipd_data.pkl or lipd_output/lipd_files.zip)"
+            exit 1
+          fi
+
+      - name: Pull Docker image
+        if: steps.pathway.outputs.pathway != 'prebuilt'
+        run: docker pull davidedge/lmr2:latest
+
+      # FILTERED PATHWAY: lipd_files.zip → cfr.ProxyDatabase (direct JSON parsing, no SPARQL)
+      - name: Convert LiPD to ProxyDatabase (filtered pathway)
+        if: steps.pathway.outputs.pathway == 'github_actions' && steps.pathway.outputs.mode == 'filtered'
+        run: |
+          echo "Converting .lpd files to cfr.ProxyDatabase using lipd_to_pdb.py ..."
+          docker run --rm \
+            -v $(pwd)/lipd_output/lipd_files.zip:/app/lipd_files.zip:ro \
+            -v $(pwd)/scripts/lipd_to_pdb.py:/app/lipd_to_pdb.py:ro \
+            -v $(pwd):/output \
+            -w /app \
+            davidedge/lmr2:latest \
+            conda run -n cfr-env python lipd_to_pdb.py lipd_files.zip /output/lipd_cfr.pkl
+
+      # ARCHIVED / TRADITIONAL PATHWAY: legacy LiPD dict pickle → CFR DataFrame
+      - name: Convert LiPD format (archived/traditional pathway)
+        if: steps.pathway.outputs.pathway != 'prebuilt' && steps.pathway.outputs.mode != 'filtered'
+        run: |
+          echo "Converting LiPD pickle to CFR format using convert_lipd_to_cfr_dataframe.py ..."
+          docker run --rm \
+            -v $(pwd)/lipd_data.pkl:/app/lipd_data.pkl:ro \
+            -v $(pwd)/scripts/convert_lipd_to_cfr_dataframe.py:/app/convert_lipd_to_cfr_dataframe.py:ro \
+            -v $(pwd):/output \
+            -w /app \
+            davidedge/lmr2:latest \
+            conda run -n cfr-env python convert_lipd_to_cfr_dataframe.py lipd_data.pkl /output/lipd_cfr.pkl
+
+      - name: Verify CFR data created
+        run: |
+          if [ -f lipd_cfr.pkl ]; then
+            echo "CFR data file ready"
+            ls -lh lipd_cfr.pkl
+          else
+            echo "ERROR: lipd_cfr.pkl not found"
+            exit 1
+          fi
+
+      - name: Upload CFR data artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lipd-cfr-data-${{ github.run_id }}
+          path: lipd_cfr.pkl
+          retention-days: 7
+
+  # ── Job 2: Run CFR reconstruction ─────────────────────────────────────────
+  # Re-run this job alone (via "Re-run failed jobs") when only CFR config
+  # changes are needed — no need to redo the 20-min data generation.
+  reconstruct:
+    needs: prepare-data
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download CFR data artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lipd-cfr-data-${{ github.run_id }}
+
+      - name: Pull Docker image
+        run: docker pull davidedge/lmr2:latest
+
+      - name: Create results directory
+        run: mkdir -p ./recons
+
+      - name: Run CFR reconstruction
+        run: |
+          echo "Running LMR CFR reconstruction..."
+          # TQDM_MININTERVAL=30 throttles tqdm progress bars to one update
+          # every 30 seconds — GitHub Actions logs can't do \r overwriting,
+          # so each flush becomes a new line. Without this, a single KF loop
+          # prints thousands of lines.
+          docker run --rm \
+            -e TQDM_MININTERVAL=30 \
+            -v $(pwd)/scripts/cfr_main_code.py:/app/cfr_main_code.py:ro \
+            -v $(pwd)/lmr_configs.yml:/app/user_config.yml:ro \
+            -v $(pwd)/lipd_cfr.pkl:/app/lipd_cfr.pkl:ro \
+            -v $(pwd)/recons:/recons \
+            davidedge/lmr2:latest \
+            python cfr_main_code.py
+
+      - name: Verify reconstruction results
+        run: |
+          if [ -d ./recons ] && [ "$(ls -A ./recons)" ]; then
+            echo "Reconstruction completed successfully"
+            ls -lh ./recons/
+          else
+            echo "ERROR: No reconstruction results generated"
+            exit 1
+          fi
+
+      - name: Combine seed runs into combined_recon.nc
+        run: |
+          echo "Combining all seed runs into combined_recon.nc for visualization..."
+          docker run --rm             -v $(pwd)/scripts/combine_seeds.py:/app/combine_seeds.py:ro             -v $(pwd)/recons:/recons             davidedge/lmr2:latest             python /app/combine_seeds.py
+
+      - name: Upload reconstruction results
+        uses: actions/upload-artifact@v4
+        with:
+          name: lmr-reconstruction-${{ github.run_id }}
+          path: ./recons/
+          retention-days: 90
+
+      - name: Commit results to repository
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add recons/
+          git diff --staged --quiet || git commit -m "Add LMR reconstruction results for ${{ github.run_id }}"
+          git push

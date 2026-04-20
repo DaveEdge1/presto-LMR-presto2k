@@ -1,0 +1,26 @@
+recon_period:
+  - 850
+  - 2020
+recon_seeds:
+  - 1
+prior_annualize_months:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+prior_anom_period:
+  - 850
+  - 1850
+assim_frac: 0.75
+nens: 100
+recon_loc_rad: 25000
+proxydb_path: /app/lipd_cfr.pkl
+save_dirpath: /recons
