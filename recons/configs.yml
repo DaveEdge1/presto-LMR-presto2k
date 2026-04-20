@@ -76,11 +76,25 @@ psm_calib_period:
 ptype_clim_dict:
   coral.SrCa:
   - tas
+  coral.calc:
+  - tas
   coral.d18O:
   - tas
   ice.d18O:
   - tas
   ice.dD:
+  - tas
+  ice.melt:
+  - tas
+  lake.BSi:
+  - tas
+  lake.accumulation:
+  - tas
+  lake.chironomid:
+  - tas
+  lake.other:
+  - tas
+  lake.reflectance:
   - tas
   lake.varve_thickness:
   - tas
@@ -92,9 +106,16 @@ ptype_clim_dict:
 ptype_forward_dict: {}
 ptype_psm_dict:
   coral.SrCa: Linear
+  coral.calc: Linear
   coral.d18O: Linear
   ice.d18O: Linear
   ice.dD: Linear
+  ice.melt: Linear
+  lake.BSi: Linear
+  lake.accumulation: Linear
+  lake.chironomid: Linear
+  lake.other: Linear
+  lake.reflectance: Linear
   lake.varve_thickness: Linear
   tree.MXD: Linear
   tree.TRW: Bilinear
@@ -112,6 +133,19 @@ ptype_season_dict:
   - 10
   - 11
   - 12
+  coral.calc:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
   coral.d18O:
   - 1
   - 2
@@ -139,6 +173,84 @@ ptype_season_dict:
   - 11
   - 12
   ice.dD:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  ice.melt:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  lake.BSi:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  lake.accumulation:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  lake.chironomid:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  lake.other:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  lake.reflectance:
   - 1
   - 2
   - 3
@@ -240,11 +352,20 @@ ptype_season_dict:
     - 5
 recon_loc_rad: 25000
 recon_period:
-- 850
-- 2020
+- 0
+- 2010
 recon_sampling_mode: fixed
 recon_seeds:
 - 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
+- 9
+- 10
 recon_timescale: 1
 recon_vars:
 - tas
