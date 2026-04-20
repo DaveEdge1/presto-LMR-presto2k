@@ -60,6 +60,22 @@ with open('/tmp/merged_config.yml', 'w') as f:
     yaml.dump(base_config, f)
 
 # ── Phase 1: prep (load data, calibrate PSMs) ────────────────────────────────
+# Check if the proxy database pickle is already a cfr.ProxyDatabase object
+# (e.g. presto2k_pdb.pkl) rather than a DataFrame. If so, load it directly
+# and patch load_proxydb to skip the reload (prep_da_cfg always calls it).
+import pickle as _pkl
+_pdb_path = base_config.get('proxydb_path', '')
+if os.path.exists(_pdb_path):
+    with open(_pdb_path, 'rb') as _f:
+        _pdb_obj = _pkl.load(_f)
+    if isinstance(_pdb_obj, cfr.proxy.ProxyDatabase):
+        print(f'Pre-loaded ProxyDatabase from {_pdb_path} '
+              f'({len(_pdb_obj.records)} records)')
+        job_cfg.proxydb = _pdb_obj
+        # Patch load_proxydb to no-op so prep_da_cfg doesn't overwrite
+        job_cfg.load_proxydb = lambda *a, **kw: None
+    del _pdb_obj
+
 job_cfg.prep_da_cfg('/tmp/merged_config.yml', verbose=True)
 
 # ── Phase 2: enforce minimum R floor ─────────────────────────────────────────
