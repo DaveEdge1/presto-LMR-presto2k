@@ -1,18 +1,19 @@
 [![DOI](https://zenodo.org/badge/1078431321.svg)](https://doi.org/10.5281/zenodo.17819391)
 
-# PReSto LMR Template
+# PReSto2k Reconstruction
 
-By [David Edge](https://orcid.org/0000-0001-6938-2850), [Tanaya Gondhalekar](https://orcid.org/0009-0004-2440-3266), & [Julien Emile-Geay](https://orcid.org/0000-0001-5920-4751).
+By [Nicholas Mckay](https://orcid.org/0000-0003-3598-5113), [Julien Emile-Geay](https://orcid.org/0000-0001-5920-4751), [David Edge](https://orcid.org/0000-0001-6938-2850), [Tanaya Gondhalekar](https://orcid.org/0009-0004-2440-3266), [Deborah Khider](https://orcid.org/0000-0001-7501-8430)
 
-[PReSto](https://paleopresto.com) (Paleoclimate Reconstruction Storehouse) lowers the barriers to utilizing, reproducing, and customizing paleoclimate reconstructions. This repository is a template used by PReSto to run the Last Millennium Reanalysis (LMR) via GitHub Actions.
+[PReSto](https://paleopresto.com) (Paleoclimate Reconstruction Storehouse) lowers the barriers to utilizing, reproducing, and customizing paleoclimate reconstructions. This repository was created by PReSto to run the Last Millennium Reanalysis (LMR) via GitHub Actions.
 
 ## LMR Method
 
 This template reproduces and customizes the Last Millennium Reanalysis, version 2.1 ([Tardif et al., 2019](https://doi.org/10.5194/cp-15-1251-2019)), which uses the offline data assimilation method of [Hakim et al. (2016)](https://doi.org/10.1002/2016JD024751). The reconstruction is implemented using the [cfr](https://fzhu2e.github.io/cfr/) Python package ([Zhu et al., 2024](https://doi.org/10.5194/gmd-17-3409-2024)).
 
-Proxy observations are drawn from either:
-- **Archived compilations** (e.g., PAGES 2k v2) downloaded directly from [LiPDverse](https://lipdverse.org)
-- **Filtered selections** queried from LiPDverse via PReSto's interactive map interface
+Proxy observations are drawn from three data compilations:
+- Pages2k
+- CoralHydro2k
+- Iso2k
 
 The prior is CCSM4 Last Millennium simulation (850–1850 CE) for surface temperature (`tas`) and precipitation (`pr`).
 
@@ -46,10 +47,3 @@ Two-job pipeline triggered by a push to `query_params.json` or manual dispatch:
 
 Triggered automatically after a successful `cfr-custom.yml` run (or manually). Calls the [presto-viz](https://github.com/DaveEdge1/presto-viz) reusable workflow to generate an interactive visualization and deploys it to GitHub Pages.
 
-## How to Use
-
-1. **Fork or clone** this repository
-2. Edit `lmr_configs.yml` to customize reconstruction parameters — see the [cfr LMR guide](https://fzhu2e.github.io/cfr/ug-lmr.html) for configuration options
-3. Push your changes; the workflow triggers automatically when `query_params.json` is updated, or run it manually from the **Actions** tab
-4. Reconstruction results are saved as artifacts (90-day retention) and committed to the `recons/` directory
-5. Visualizations are deployed to the repository's GitHub Pages site
